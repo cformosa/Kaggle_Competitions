@@ -1,0 +1,355 @@
+---
+title: "NYC_Kaggle"
+author: "Chris"
+date: "June 28, 2018"
+output: html_document
+---
+Start deriving insights
+Instead of more coding. Let's first do more research on these schools
+The eastern schools have a high black/hispanic however they seem to have very good income
+and economic need ratio. whats the difference?
+The southern and middle have the high Scores on the exams
+Community schools are way more prevalent in our black/hispanic areas
+Not suprisingly our areas also some the majority of the low # of SHSAT takers
+Why are Glendale and Elmhurst so high in test takers?
+Why is Broad Channel so low?
+Make sure to ignore school for the performing arts i think?
+Where are these higher acheiving schools located?
+
+First lets read in the data
+```{r}
+
+library(readr)
+exploration_data2016 <- read_csv("~/Kaggle Data Sets/Data Science for Good/2016 School Explorer.csv", 
+    na = "N/A")
+View(exploration_data2016)
+SHSAT_Stats <- read_csv("~/Kaggle Data Sets/Data Science for Good/D5 SHSAT Registrations and Testers.csv")
+View(SHSAT_Stats)
+```
+
+There are too many variables to use head or str on. Lets start with some mappings.
+First up is Economic Need Index
+```{r}
+library(leaflet)
+library(dplyr)
+exploration_data2016[["School_Economic_Bin"]] <- cut(exploration_data2016[["Economic Need Index"]], 
+                                                   breaks=c(quantile(exploration_data2016[["Economic Need Index"]], probs = seq(0, 1, by = 0.25), na.rm=T)))
+
+factpal <- colorFactor(c("green","blue","yellow","red"), 
+                       exploration_data2016[["School_Economic_Bin"]])
+
+exploration_data2016 %>% filter(!is.na(School_Economic_Bin))  %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(School_Economic_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~School_Economic_Bin,
+    title = "Economic Need Index") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+
+```{r}
+exploration_data2016[["School Income Estimate"]] <- parse_number(exploration_data2016[["School Income Estimate"]])
+exploration_data2016[["School_Income_Bin"]] <- cut(exploration_data2016[["School Income Estimate"]], 
+                                                   breaks=c(quantile(exploration_data2016[["School Income Estimate"]], probs = seq(0, 1, by = 0.25), na.rm=T)))
+
+factpal <- colorFactor(c("red","yellow","blue","green"), 
+                       exploration_data2016[["School_Income_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(School_Income_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(`School_Income_Bin`)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~`School_Income_Bin`,
+    title = "School Income Estimate") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+Seems the bronx are in need the most which is expected
+
+Lets look at black and hispanic populations
+```{r}
+exploration_data2016[["Percent Black"]] <- parse_number(exploration_data2016[["Percent Black"]])
+exploration_data2016[["Black_Bin"]] <- cut(exploration_data2016[["Percent Black"]], 
+                                                   breaks=c(0,25,50,75,100))
+
+factpal <- colorFactor(c("green","blue","yellow","red"), 
+                       exploration_data2016[["Black_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(Black_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(`Black_Bin`)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~`Black_Bin`,
+    title = "Black Percent") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+exploration_data2016[["Percent Hispanic"]] <- parse_number(exploration_data2016[["Percent Hispanic"]])
+exploration_data2016[["Hispanic_Bin"]] <- cut(exploration_data2016[["Percent Hispanic"]], 
+                                                   breaks=c(0,25,50,75,100))
+
+factpal <- colorFactor(c("green","blue","yellow","red"), 
+                       exploration_data2016[["Hispanic_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(Hispanic_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(Hispanic_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~Hispanic_Bin,
+    title = "Hispanic Percent") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+exploration_data2016[["Percent Black / Hispanic"]] <- parse_number(exploration_data2016[["Percent Black / Hispanic"]])
+exploration_data2016[["Both_Bin"]] <- cut(exploration_data2016[["Percent Black / Hispanic"]], 
+                                                   breaks=c(0,25,50,75,100))
+
+factpal <- colorFactor(c("green","blue","yellow","red"), 
+                       exploration_data2016[["Both_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(Both_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(Both_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~Both_Bin,
+    title = "Hispanic Percent") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+exploration_data2016[["Percent ELL"]] <- parse_number(exploration_data2016[["Percent ELL"]])
+exploration_data2016[["ELL_Bin"]] <- cut(exploration_data2016[["Percent ELL"]], 
+                                                   breaks=c(0,25,50,75,100))
+
+factpal <- colorFactor(c("green","blue","yellow","red"), 
+                       exploration_data2016[["ELL_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(ELL_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(ELL_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~ELL_Bin,
+    title = "ELL Percent") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+
+```{r}
+exploration_data2016[["Student Attendance Rate"]] <- parse_number(exploration_data2016[["Student Attendance Rate"]])
+exploration_data2016[["Attendance_Bin"]] <- cut(exploration_data2016[["Student Attendance Rate"]], 
+                                                   breaks=c(0,75,85,95,100))
+
+factpal <- colorFactor(c("red","yellow","blue","green"), 
+                       exploration_data2016[["Attendance_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(`Student Attendance Rate`)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(Attendance_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~Attendance_Bin,
+    title = "ELL Percent") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+exploration_data2016[["Effective School Leadership %"]] <- parse_number(exploration_data2016[["Effective School Leadership %"]])
+exploration_data2016[["Leadership_Bin"]] <- cut(exploration_data2016[["Effective School Leadership %"]], 
+                                                   breaks=c(0,75,85,95,100))
+
+factpal <- colorFactor(c("green","blue","yellow","red"), 
+                       exploration_data2016[["Leadership_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(Leadership_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(Leadership_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~Leadership_Bin,
+    title = "Leadership Percent") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+exploration_data2016[["Average ELA Proficiency"]] <- parse_number(exploration_data2016[["Average ELA Proficiency"]])
+exploration_data2016[["ELA_Bin"]] <- cut(exploration_data2016[["Average ELA Proficiency"]], 
+                                                   breaks=c(0,2,2.67,3.33,4))
+
+factpal <- colorFactor(c("red","yellow","blue","green"), 
+                       exploration_data2016[["ELA_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(ELA_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(ELA_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~ELA_Bin,
+    title = "ELA Average") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+
+```{r}
+exploration_data2016[["Average Math Proficiency"]] <- parse_number(exploration_data2016[["Average Math Proficiency"]])
+exploration_data2016[["Math_Bin"]] <- cut(exploration_data2016[["Average Math Proficiency"]], 
+                                                   breaks=c(0,2,2.67,3.33,4))
+
+factpal <- colorFactor(c("red","yellow","blue","green"), 
+                       exploration_data2016[["Math_Bin"]])
+
+
+exploration_data2016 %>% filter(!is.na(Math_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(Math_Bin)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~Math_Bin,
+    title = "Math Average") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+
+factpal <- colorFactor(c("green", "red"), 
+                       exploration_data2016[["Community School?"]])
+
+
+exploration_data2016  %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~factpal(`Community School?`)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~`Community School?`,
+    title = "Community School") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+```{r}
+factpal <- colorFactor(topo.colors(11), 
+                      exploration_data2016[["Grade High"]])
+
+
+exploration_data2016  %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, color = ~factpal(`Grade High`)) %>% 
+  addTiles() %>%
+  addLegend("bottomright", pal = factpal, values = ~`Grade High`,
+    title = "Highest Grade") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+
+Get data around the all student columns
+```{r}
+#sum across multiple
+total_number <- exploration_data2016 %>% select(Latitude, Longitude, District, contains("All Students Tested")) %>%
+  mutate(row_sums = rowSums(.[4:15])) 
+
+total_number[["Total_Takers_Bin"]] <- cut(total_number[["row_sums"]], 
+                                                   breaks=c(0,500,1000,2000,5000))
+
+qpal <- colorFactor(c("red","yellow","blue","green"), 
+                       total_number[["Total_Takers_Bin"]])
+
+total_number %>% filter(!is.na(Total_Takers_Bin)) %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = ~qpal(Total_Takers_Bin)) %>% 
+  addTiles() %>%
+    addLegend("bottomright", pal = qpal, values = ~Total_Takers_Bin,
+    title = "# of Exam Takers") %>%
+  fitBounds(min(exploration_data2016$Longitude), min(exploration_data2016$Latitude),
+            max(exploration_data2016$Longitude), max(exploration_data2016$Latitude))
+```
+
+get a subset of columns for per city of only rows with min at least grade 3 and max grade 8
+```{r}
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(forcats)
+time_series <- exploration_data2016 %>% filter(`Grade Low` %in% c("03", '02', '01', 'PK', '0K') & 
+                                  `Grade High` %in% c("08")) %>% select(City, contains("ELA - All Students Tested")) %>% group_by(City) %>%
+                      summarise_all(mean) %>% gather(Test_Year, Average_Taken, `Grade 3 ELA - All Students Tested`:`Grade 8 ELA - All Students Tested`) 
+
+time_series$Test_Year <- parse_number(time_series[["Test_Year"]])
+
+
+
+g <- ggplot(time_series, aes(x=Test_Year, y = Average_Taken)) + geom_line(aes(color=City))
+library(plotly)
+ggplotly(g)
+```
+
+Make a heatmap next of the SHSHAT
+
+```{r}
+SHSAT_Stats["Percent_Registration"] <- SHSAT_Stats["Number of students who registered for the SHSAT"]/SHSAT_Stats["Enrollment on 10/31"]
+SHSAT_Stats["Percent_Taken_OfReg"] <- SHSAT_Stats["Number of students who took the SHSAT"]/SHSAT_Stats["Enrollment on 10/31"]
+spread_data <- SHSAT_Stats %>% spread(`Year of SHST`, value = `Percent_Registration`, fill = 0) %>% select(`School name`, `2013`, `2014`, `2015`, `2016`)
+
+spread_agg <- spread_data %>% group_by(`School name`) %>% summarise(sum_2013 = sum(`2013`),
+                                                                    sum_2014 = sum(`2014`),
+                                                                    sum_2015 = sum(`2015`),
+                                                                    sum_2016 = sum(`2016`))
+library(RColorBrewer)
+plot_ly(
+  x = c("2013", "2014", "2015", "2016"), y = spread_agg[["School name"]],
+        z = as.matrix(spread_agg[2:5]), type = "heatmap"
+)
+
+```
+
+```{r}
+spread_data <- SHSAT_Stats %>% spread(`Year of SHST`, value = `Percent_Taken_OfReg`, fill = 0) %>% select(`School name`, `2013`, `2014`, `2015`, `2016`)
+
+spread_agg <- spread_data %>% group_by(`School name`) %>% summarise(sum_2013 = sum(`2013`),
+                                                                    sum_2014 = sum(`2014`),
+                                                                    sum_2015 = sum(`2015`),
+                                                                    sum_2016 = sum(`2016`))
+plot_ly(
+  x = c("2013", "2014", "2015", "2016"), y = spread_agg[["School name"]],
+        z = as.matrix(spread_agg[2:5]), type = "heatmap"
+)
+```
+
+
+
+
+
+
+
+
+After analysis. Lets first isolate the data with just the rows with > 75% black/hispanic
+```{r}
+heavy_ethnic <-  exploration_data2016 %>% filter(`Percent Black / Hispanic` >= 75)
+heavy_ethnic  %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = "Red") %>% 
+  addTiles() %>%
+  fitBounds(min(heavy_ethnic$Longitude), min(heavy_ethnic$Latitude),
+            max(heavy_ethnic$Longitude), max(heavy_ethnic$Latitude))
+```
+From this, we see there are more or less 4 main parts to initially focus our attention on (low hanging fruit first). The bronx area, brooklyn, east queens and lower manhattan.
+
+
+Lets see how many of these areas have good math and ELA scores
+```{r}
+high_learners <-  heavy_ethnic %>% filter(`Average ELA Proficiency` >= 3 & `Average Math Proficiency` >= 3)
+high_learners  %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = "Red") %>% 
+  addTiles() %>%
+  fitBounds(min(heavy_ethnic$Longitude), min(heavy_ethnic$Latitude),
+            max(heavy_ethnic$Longitude), max(heavy_ethnic$Latitude))
+```
+How does this compare to non ethnic places. Manhattan does really well. that might be a good area to look at.
+```{r}
+high_learn <-  exploration_data2016 %>% filter(`Percent Black / Hispanic` < 75 & `Average ELA Proficiency` >= 3 & `Average Math Proficiency` >= 3)
+high_learn  %>% leaflet() %>% addCircles(lng = ~Longitude, lat = ~Latitude, 
+                                             color = "Red") %>% 
+  addTiles() %>%
+  fitBounds(min(heavy_ethnic$Longitude), min(heavy_ethnic$Latitude),
+            max(heavy_ethnic$Longitude), max(heavy_ethnic$Latitude))
+```
+

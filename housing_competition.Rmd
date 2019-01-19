@@ -1,0 +1,230 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+To DO:
+Switch a couple factor columns with ordinal columns
+
+----------
+
+Read in Data
+
+```{r}
+train <- read.csv("~/Kaggle Data Sets/housing_train.csv")
+test <- read.csv("~/Kaggle Data Sets/housing_test.csv")
+```
+
+Combine the train and test datasets into one for easier cleaning
+
+```{r}
+train_no_y = train[, !names(train) %in% c("SalePrice")]
+total <- rbind(train_no_y,test)
+str(total)
+```
+
+Figure out missing value situation
+
+```{r}
+#from here, lets say we should drop the top 5 variables to start
+sort(apply(total,2, function(x){sum(is.na(x))/length(x)}), decreasing = TRUE)[1:10]
+```
+
+Fill in training data so we can use Feature Selection to determine best variables
+```{r}
+library(mice)
+trainy <- subset(train, , select = -c(PoolQC, MiscFeature, Alley, Fence, Utilities, FireplaceQu, Id, SalePrice))
+imp_pre <- mice(trainy, m=1, maxit = 2, defaultMethod = c('rf', 'rf','rf','cart'), seed = 123)
+new_train_pre <- complete(imp_pre)
+```
+
+Get the important variables to use in prediction
+```{r}
+library(Boruta)
+BDawg <- Boruta(new_train_pre[, names(new_train_pre) != "SalePrice"], train$SalePrice, maxRuns = 100, doTrace = 1)
+plot(BDawg)
+```
+
+Make a list of the important variables
+```{r}
+final.boruta <- TentativeRoughFix(BDawg)
+vars_keep <- getSelectedAttributes(final.boruta)
+boruta.df <- attStats(final.boruta)
+```
+
+Remove variables that we can't help to be useful or accurate
+```{r}
+total <- subset(total, , select = -c(PoolQC, MiscFeature, Alley, Fence, Utilities, FireplaceQu, Id))
+
+total <- total[, colnames(total) %in% vars_keep]
+```
+
+Some simple plots to just get relationship ideas
+
+```{r}
+library(ggplot2)
+hist(log(train$SalePrice))
+```
+
+Impute missing values using cart. For now this should be fairly okay. If really want better results maybe be more specific about which algorithms to choose.
+
+```{r}
+library(mice)
+
+imp <- mice(total, m=1, maxit = 2, defaultMethod = c('rf', 'rf','rf','cart'), seed = 123) #c(numeric, factor <2 types, factor >2 types, ordered data)
+```
+Tells us which variables were imputed
+
+```{r}
+#shows the method used on each variable if needed
+imp$method
+```
+Update the imputed dataset to our new dataset
+
+First make the categorical columns factor variables since mice adds dimension and attributes
+```{r}
+new_train <- complete(imp)
+for(i in names(new_train)){
+  if(class(new_train[[i]]) == "factor"){
+    new_train[[i]] <- factor(new_train[[i]])
+  }
+}
+
+```
+
+Next substitute values into our total dataset
+
+```{r}
+non_zero <- colSums(is.na(total))
+cols <- names(non_zero[non_zero > 0])
+total[cols] <- new_train[cols]
+total$GarageArea.1 <- NULL
+colSums(is.na(total))
+```
+
+Transform numeric variables above skew threshold of .75... is not necessary (or normally useful) for tree based methods)
+```{r}
+library(e1071)
+numeric_columns <- names(total[total != "factor"])
+for(i in names(total)){
+  if(class(new_train[[i]]) != "factor"){
+    numeric_columns[[i]] <- total[[i]]
+  }
+}
+#determining skew of each numric variable
+skew <- names(total[total != "factor"])
+for(i in names(numeric_columns)){
+  skew[i] <- skewness(total[[i]])
+}
+# Let us determine a threshold skewness and transform all variables above the treshold.
+skew <- skew[skew > 0.75]
+
+# transform excessively skewed features with log(x + 1)
+for(x in names(skew)) {
+  total[[x]] <- log(total[[x]] + 1)
+}
+```
+
+Set up parallel code
+```{r}
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+```
+
+
+Create Data Partition for test and train set and set up 5 fold cross validation.
+
+```{r}
+
+#without dummy variables
+#new_data <- train[,1:31]
+#colnames(new_data) <- colnames(total)
+#new_data[,1:31] <- total[1:1460,]
+#new_data$SalePrice <- train$SalePrice
+#test <- total[1461:nrow(total),]
+library(caret)
+#train_idx <- createDataPartition(new_data$SalePrice, p = .8, list = FALSE) #list = FALSE is important
+#train_set <- new_data
+#validation_set <- new_data[-train_idx,]
+
+
+#with dummy variables
+dummy_vars <- dummyVars("~.", data = total)
+brandnew_data <- data.frame(predict(dummy_vars, newdata = total))
+brandnew_train <- brandnew_data[1:1460,]
+brandnew_train$SalePrice <- log(train$SalePrice)
+
+brandnew_test <- brandnew_data[1461:nrow(total),]
+
+#allowParallel lets caret use multiprocessing... currently fucks up xgboost though
+cvControl <- trainControl(method = 'cv', number = 5,  allowParallel = TRUE,verbose = TRUE)
+```
+
+In order to use lasso can't use columns with zero variance, so I just chose to eliminate the 5 columns with basically zero variance
+```{r}
+nzv <- nearZeroVar(brandnew_train, saveMetrics= TRUE)
+nzv[nzv$nzv,][,"freqRatio"]
+
+#remove columns with variance < 1400... i.e. 1459 means that only 1 value was not the exact same
+data_lasso <- brandnew_train[, -nearZeroVar(brandnew_train)[c(45, 48, 50,58,61, 73, 76, 84)]]
+```
+
+```{r}
+set.seed(123)
+#lmFit <- train(SalePrice ~., data = brandnew_train, method = "lm", trControl = cvControl)
+ptm <- proc.time()
+#lassoFit <- train(SalePrice ~., data = data_lasso, method = "enet", trControl = cvControl, tuneLength = 30)
+#xgbGrid <- expand.grid(
+#              eta=c(.05,.01),
+#              colsample_bytree = .4,
+#              max_depth = 2,
+#              min_child_weight = 1,
+#              gamma = c(.025),
+#              subsample = c(.75), 
+#              nrounds = c(1000))
+#xgbFit <- train(SalePrice ~., data = data_lasso, method = "xgbTree", trControl = cvControl, tuneGrid = xgbGrid)
+
+
+
+xgbFit <- train(SalePrice ~., data = data_lasso, method = "xgbLinear", trControl = cvControl)
+proc.time() - ptm
+```
+
+close clusters... this brings R back to single processing... without this we never go back!
+```{r}
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+```{r}
+#prediction <- predict(fit_1,validate,type = "response")
+#prediction <- predict(lassoFit, brandnew_train)
+#prediction <- exp(prediction)
+
+prediction <- predict(xgbFit, brandnew_train)
+prediction <- exp(prediction)
+
+
+#this is the formula being used
+rmse <- sqrt(mean((log(prediction)-log(train$SalePrice))^2,na.rm=T))
+rmse
+```
+
+Looks pretty random scattery
+```{r}
+plot(fitted(lmFit), residuals(lmFit))
+```
+
+```{r}
+preds <- predict(xgbFit, brandnew_test)
+
+preds <- exp(preds) #this is necessary to predict correct if using a log y variable
+col1 <- data.frame(test$Id)
+col2 <- data.frame(preds)
+Submission <- data.frame(ID = 1461:2919, SalePrice = col2)
+colnames(Submission) = c("ID", "SalePrice")
+write.csv(Submission, "~/Kaggle Data Sets/Results.csv", row.names = FALSE)
+```

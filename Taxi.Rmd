@@ -1,0 +1,113 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+NYC Taxi Data..
+```{r}
+library(tidyverse)
+train <- read_csv("~/Kaggle Data Sets/NY Taxi Data/train.csv")
+train
+```
+
+work with datetime info with lubridate
+```{r}
+library(lubridate)
+date_separated <- train %>%
+  separate(pickup_datetime, c("pickup_date", "pickup_time"), sep = " ") %>% 
+  separate(dropoff_datetime, c("dropoff_date", "dropoff_time"), sep = " ") %>%
+  mutate(pickup_year = year(pickup_date),
+         dropoff_year = year(dropoff_date),
+         pickup_month = month(pickup_date, label = T),
+         dropoff_month = month(dropoff_date, label = T),
+         pickup_day = wday(pickup_date, label = T, abbr = F),
+         dropoff_day = wday(dropoff_date, label = T, abbr = F))
+date_separated[,c(3,5)] <- map(date_separated[,c(3,5)], ymd) #takes a little to run
+date_separated[,c(4,6)] <- map(date_separated[,c(4,6)], hms)
+View(date_separated)
+str(date_separated)
+date_separated
+
+```
+
+IGNORE... This is just for exploratory... takes a bit to run 
+```{r}
+#get lat-lon in correct format
+new_data <- date_separated %>% unite(pickup_location, pickup_latitude, pickup_longitude, sep = "+", remove = T)
+new_data2 <- new_data %>%  unite(dropoff_location, dropoff_latitude, dropoff_longitude, sep = "+", remove = T) 
+
+#load google maps and 
+library(gmapsdistance)
+
+#unfortunately below is super neat, but takes way to long to run
+set.api.key("AIzaSyCXL-VAfzSXQvaJECQ-40nCIA-jPQq0Cho")
+Map_Data <-new_data2[1:5,] %>% 
+  rowwise() %>% 
+  mutate(Driving_Distance= gmapsdistance(origin= pickup_location, destination = dropoff_location, mode = "driving")$Distance)
+
+#not as good, but consider geosphere
+library(geosphere)
+Map_Data <-date_separated %>% 
+  rowwise() %>% 
+  mutate(Shortest_Distance= distCosine(c(pickup_longitude, pickup_latitude), c(dropoff_longitude,dropoff_latitude)))
+
+
+#Consider leafplot to show distribution of travel
+subby <- sample_n(train, 4e3)
+library(leaflet)
+pal <- colorFactor(
+  palette = c('red', 'blue'),
+  domain = subby$vendor_id
+)
+leaflet(data = subby) %>% addProviderTiles("Esri.NatGeoWorldMap") %>%
+  addCircleMarkers(~ pickup_longitude, ~pickup_latitude, radius = 1, color = ~pal(vendor_id), fillOpacity = 0.3)
+```
+
+
+Begin with some simple stats with dplyr
+```{r}
+date_separated %>%
+  select(trip_duration) %>%
+  summarise(mean = round(mean(trip_duration),0))
+
+month_view <- date_separated %>%
+  group_by(vendor_id, pickup_month) %>%
+  summarise( total_count =n(),
+             average_time = round(mean(trip_duration), 0),
+             median_time = round(median(trip_duration), 0),
+             average_passengers = round(mean(passenger_count),2))
+month_view
+```
+```{r}
+wday_view <- date_separated %>%
+  group_by(vendor_id,pickup_day) %>%
+  summarise(average_time = round(mean(trip_duration), 0),
+             median_time = round(median(trip_duration), 0))
+wday_view
+```
+
+
+
+ggplot and latitude mapping
+```{r}
+ggplot(month_view, aes(pickup_month, median_time, color = vendor_id)) + geom_point(size = 6)
+ggplot()
+```
+```{r}
+View(date_separated)
+#need to scale axis cause of outliers
+ggplot(date_separated, aes(pickup_day, trip_duration)) + geom_boxplot(aes(color=pickup_day)) +scale_y_log10() + coord_flip() + facet_wrap(~vendor_id)
+```
+As trip distance gets longer so does trip_duration obviously
+```{r}
+ggplot(Map_Data, aes(trip_duration, Shortest_Distance)) + geom_point() +geom_smooth(aes(color=vendor_id)) +scale_x_log10()+scale_y_log10()
+```
+
+Outlier Detection
+```{r}
+date_separated %>%
+  select(trip_duration) %>% top_n(10) %>% arrange(trip_duration) 
+
+date_separated %>%
+  select(trip_duration) %>% top_n(-10) %>% arrange(trip_duration) 
+```
+
